@@ -1,12 +1,11 @@
 import netaddr
-from django.conf import settings
-from django.db.models import Count, Prefetch
+from django.db.models import Prefetch
 from django.db.models.expressions import RawSQL
 from django.shortcuts import get_object_or_404, redirect, render
 from django_tables2 import RequestConfig
 
 from dcim.models import Device, Interface
-from utilities.paginator import EnhancedPaginator
+from utilities.paginator import EnhancedPaginator, get_paginate_count
 from utilities.utils import get_subquery
 from utilities.views import (
     BulkCreateView, BulkDeleteView, BulkEditView, BulkImportView, ObjectView, ObjectDeleteView, ObjectEditView,
@@ -79,7 +78,9 @@ class VRFBulkDeleteView(BulkDeleteView):
 #
 
 class RIRListView(ObjectListView):
-    queryset = RIR.objects.annotate(aggregate_count=Count('aggregates')).order_by(*RIR._meta.ordering)
+    queryset = RIR.objects.annotate(
+        aggregate_count=get_subquery(Aggregate, 'rir')
+    )
     filterset = filters.RIRFilterSet
     filterset_form = forms.RIRFilterForm
     table = tables.RIRDetailTable
@@ -172,7 +173,9 @@ class RIRBulkImportView(BulkImportView):
 
 
 class RIRBulkDeleteView(BulkDeleteView):
-    queryset = RIR.objects.annotate(aggregate_count=Count('aggregates')).order_by(*RIR._meta.ordering)
+    queryset = RIR.objects.annotate(
+        aggregate_count=get_subquery(Aggregate, 'rir')
+    )
     filterset = filters.RIRFilterSet
     table = tables.RIRTable
 
@@ -184,7 +187,7 @@ class RIRBulkDeleteView(BulkDeleteView):
 class AggregateListView(ObjectListView):
     queryset = Aggregate.objects.prefetch_related('rir').annotate(
         child_count=RawSQL('SELECT COUNT(*) FROM ipam_prefix WHERE ipam_prefix.prefix <<= ipam_aggregate.prefix', ())
-    ).order_by(*Aggregate._meta.ordering)
+    )
     filterset = filters.AggregateFilterSet
     filterset_form = forms.AggregateFilterForm
     table = tables.AggregateDetailTable
@@ -233,7 +236,7 @@ class AggregateView(ObjectView):
 
         paginate = {
             'paginator_class': EnhancedPaginator,
-            'per_page': request.GET.get('per_page', settings.PAGINATE_COUNT)
+            'per_page': get_paginate_count(request)
         }
         RequestConfig(request, paginate).configure(prefix_table)
 
@@ -391,7 +394,7 @@ class PrefixPrefixesView(ObjectView):
 
         paginate = {
             'paginator_class': EnhancedPaginator,
-            'per_page': request.GET.get('per_page', settings.PAGINATE_COUNT)
+            'per_page': get_paginate_count(request)
         }
         RequestConfig(request, paginate).configure(prefix_table)
 
@@ -435,7 +438,7 @@ class PrefixIPAddressesView(ObjectView):
 
         paginate = {
             'paginator_class': EnhancedPaginator,
-            'per_page': request.GET.get('per_page', settings.PAGINATE_COUNT)
+            'per_page': get_paginate_count(request)
         }
         RequestConfig(request, paginate).configure(ip_table)
 
@@ -527,7 +530,8 @@ class IPAddressView(ObjectView):
         # Exclude anycast IPs if this IP is anycast
         if ipaddress.role == IPAddressRoleChoices.ROLE_ANYCAST:
             duplicate_ips = duplicate_ips.exclude(role=IPAddressRoleChoices.ROLE_ANYCAST)
-        duplicate_ips_table = tables.IPAddressTable(list(duplicate_ips), orderable=False)
+        # Limit to a maximum of 10 duplicates displayed here
+        duplicate_ips_table = tables.IPAddressTable(duplicate_ips[:10], orderable=False)
 
         # Related IP table
         related_ips = IPAddress.objects.restrict(request.user, 'view').exclude(
@@ -539,7 +543,7 @@ class IPAddressView(ObjectView):
 
         paginate = {
             'paginator_class': EnhancedPaginator,
-            'per_page': request.GET.get('per_page', settings.PAGINATE_COUNT)
+            'per_page': get_paginate_count(request)
         }
         RequestConfig(request, paginate).configure(related_ips_table)
 
@@ -547,6 +551,7 @@ class IPAddressView(ObjectView):
             'ipaddress': ipaddress,
             'parent_prefixes_table': parent_prefixes_table,
             'duplicate_ips_table': duplicate_ips_table,
+            'more_duplicate_ips': duplicate_ips.count() > 10,
             'related_ips_table': related_ips_table,
         })
 
@@ -650,8 +655,8 @@ class IPAddressBulkDeleteView(BulkDeleteView):
 
 class VLANGroupListView(ObjectListView):
     queryset = VLANGroup.objects.prefetch_related('site').annotate(
-        vlan_count=Count('vlans')
-    ).order_by(*VLANGroup._meta.ordering)
+        vlan_count=get_subquery(VLAN, 'group')
+    )
     filterset = filters.VLANGroupFilterSet
     filterset_form = forms.VLANGroupFilterForm
     table = tables.VLANGroupTable
@@ -674,8 +679,8 @@ class VLANGroupBulkImportView(BulkImportView):
 
 class VLANGroupBulkDeleteView(BulkDeleteView):
     queryset = VLANGroup.objects.prefetch_related('site').annotate(
-        vlan_count=Count('vlans')
-    ).order_by(*VLANGroup._meta.ordering)
+        vlan_count=get_subquery(VLAN, 'group')
+    )
     filterset = filters.VLANGroupFilterSet
     table = tables.VLANGroupTable
 
@@ -699,7 +704,7 @@ class VLANGroupVLANsView(ObjectView):
 
         paginate = {
             'paginator_class': EnhancedPaginator,
-            'per_page': request.GET.get('per_page', settings.PAGINATE_COUNT)
+            'per_page': get_paginate_count(request),
         }
         RequestConfig(request, paginate).configure(vlan_table)
 
@@ -713,6 +718,7 @@ class VLANGroupVLANsView(ObjectView):
         return render(request, 'ipam/vlangroup_vlans.html', {
             'vlan_group': vlan_group,
             'first_available_vlan': vlan_group.get_next_available_vid(),
+            'bulk_querystring': 'group_id={}'.format(vlan_group.pk),
             'vlan_table': vlan_table,
             'permissions': permissions,
         })
@@ -759,7 +765,7 @@ class VLANInterfacesView(ObjectView):
 
         paginate = {
             'paginator_class': EnhancedPaginator,
-            'per_page': request.GET.get('per_page', settings.PAGINATE_COUNT)
+            'per_page': get_paginate_count(request)
         }
         RequestConfig(request, paginate).configure(members_table)
 
@@ -780,7 +786,7 @@ class VLANVMInterfacesView(ObjectView):
 
         paginate = {
             'paginator_class': EnhancedPaginator,
-            'per_page': request.GET.get('per_page', settings.PAGINATE_COUNT)
+            'per_page': get_paginate_count(request)
         }
         RequestConfig(request, paginate).configure(members_table)
 

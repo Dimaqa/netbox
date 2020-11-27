@@ -2,7 +2,7 @@ import socket
 from collections import OrderedDict
 
 from django.conf import settings
-from django.db.models import Count, F
+from django.db.models import F
 from django.http import HttpResponseForbidden, HttpResponse
 from django.shortcuts import get_object_or_404
 from drf_yasg import openapi
@@ -24,7 +24,7 @@ from dcim.models import (
     VirtualChassis,
 )
 from extras.api.serializers import RenderedGraphSerializer
-from extras.api.views import CustomFieldModelViewSet
+from extras.api.views import ConfigContextQuerySetMixin, CustomFieldModelViewSet
 from extras.models import Graph
 from ipam.models import Prefix, VLAN
 from utilities.api import (
@@ -109,7 +109,7 @@ class SiteViewSet(CustomFieldModelViewSet):
         vlan_count=get_subquery(VLAN, 'site'),
         circuit_count=get_subquery(Circuit, 'terminations__site'),
         virtualmachine_count=get_subquery(VirtualMachine, 'cluster__site'),
-    ).order_by(*Site._meta.ordering)
+    )
     serializer_class = serializers.SiteSerializer
     filterset_class = filters.SiteFilterSet
 
@@ -146,8 +146,8 @@ class RackGroupViewSet(ModelViewSet):
 
 class RackRoleViewSet(ModelViewSet):
     queryset = RackRole.objects.annotate(
-        rack_count=Count('racks')
-    ).order_by(*RackRole._meta.ordering)
+        rack_count=get_subquery(Rack, 'role')
+    )
     serializer_class = serializers.RackRoleSerializer
     filterset_class = filters.RackRoleFilterSet
 
@@ -162,7 +162,7 @@ class RackViewSet(CustomFieldModelViewSet):
     ).annotate(
         device_count=get_subquery(Device, 'rack'),
         powerfeed_count=get_subquery(PowerFeed, 'rack')
-    ).order_by(*Rack._meta.ordering)
+    )
     serializer_class = serializers.RackSerializer
     filterset_class = filters.RackFilterSet
 
@@ -237,7 +237,7 @@ class ManufacturerViewSet(ModelViewSet):
         devicetype_count=get_subquery(DeviceType, 'manufacturer'),
         inventoryitem_count=get_subquery(InventoryItem, 'manufacturer'),
         platform_count=get_subquery(Platform, 'manufacturer')
-    ).order_by(*Manufacturer._meta.ordering)
+    )
     serializer_class = serializers.ManufacturerSerializer
     filterset_class = filters.ManufacturerFilterSet
 
@@ -248,8 +248,8 @@ class ManufacturerViewSet(ModelViewSet):
 
 class DeviceTypeViewSet(CustomFieldModelViewSet):
     queryset = DeviceType.objects.prefetch_related('manufacturer', 'tags').annotate(
-        device_count=Count('instances')
-    ).order_by(*DeviceType._meta.ordering)
+        device_count=get_subquery(Device, 'device_type')
+    )
     serializer_class = serializers.DeviceTypeSerializer
     filterset_class = filters.DeviceTypeFilterSet
 
@@ -314,7 +314,7 @@ class DeviceRoleViewSet(ModelViewSet):
     queryset = DeviceRole.objects.annotate(
         device_count=get_subquery(Device, 'device_role'),
         virtualmachine_count=get_subquery(VirtualMachine, 'role')
-    ).order_by(*DeviceRole._meta.ordering)
+    )
     serializer_class = serializers.DeviceRoleSerializer
     filterset_class = filters.DeviceRoleFilterSet
 
@@ -327,7 +327,7 @@ class PlatformViewSet(ModelViewSet):
     queryset = Platform.objects.annotate(
         device_count=get_subquery(Device, 'platform'),
         virtualmachine_count=get_subquery(VirtualMachine, 'platform')
-    ).order_by(*Platform._meta.ordering)
+    )
     serializer_class = serializers.PlatformSerializer
     filterset_class = filters.PlatformFilterSet
 
@@ -336,7 +336,7 @@ class PlatformViewSet(ModelViewSet):
 # Devices
 #
 
-class DeviceViewSet(CustomFieldModelViewSet):
+class DeviceViewSet(CustomFieldModelViewSet, ConfigContextQuerySetMixin):
     queryset = Device.objects.prefetch_related(
         'device_type__manufacturer', 'device_role', 'tenant', 'platform', 'site', 'rack', 'parent_bay',
         'virtual_chassis__master', 'primary_ip4__nat_outside', 'primary_ip6__nat_outside', 'tags',
@@ -396,9 +396,7 @@ class DeviceViewSet(CustomFieldModelViewSet):
         if device.platform is None:
             raise ServiceUnavailable("No platform is configured for this device.")
         if not device.platform.napalm_driver:
-            raise ServiceUnavailable("No NAPALM driver is configured for this device's platform {}.".format(
-                device.platform
-            ))
+            raise ServiceUnavailable(f"No NAPALM driver is configured for this device's platform: {device.platform}.")
 
         # Check for primary IP address from NetBox object
         if device.primary_ip:
@@ -407,21 +405,25 @@ class DeviceViewSet(CustomFieldModelViewSet):
             # Raise exception for no IP address and no Name if device.name does not exist
             if not device.name:
                 raise ServiceUnavailable(
-                    "This device does not have a primary IP address or device name to lookup configured.")
+                    "This device does not have a primary IP address or device name to lookup configured."
+                )
             try:
                 # Attempt to complete a DNS name resolution if no primary_ip is set
                 host = socket.gethostbyname(device.name)
             except socket.gaierror:
                 # Name lookup failure
                 raise ServiceUnavailable(
-                    f"Name lookup failure, unable to resolve IP address for {device.name}. Please set Primary IP or setup name resolution.")
+                    f"Name lookup failure, unable to resolve IP address for {device.name}. Please set Primary IP or "
+                    f"setup name resolution.")
 
         # Check that NAPALM is installed
         try:
             import napalm
             from napalm.base.exceptions import ModuleImportError
-        except ImportError:
-            raise ServiceUnavailable("NAPALM is not installed. Please see the documentation for instructions.")
+        except ModuleNotFoundError as e:
+            if getattr(e, 'name') == 'napalm':
+                raise ServiceUnavailable("NAPALM is not installed. Please see the documentation for instructions.")
+            raise e
 
         # Validate the configured driver
         try:
@@ -617,8 +619,8 @@ class CableViewSet(ModelViewSet):
 
 class VirtualChassisViewSet(ModelViewSet):
     queryset = VirtualChassis.objects.prefetch_related('tags').annotate(
-        member_count=Count('members', distinct=True)
-    ).order_by(*VirtualChassis._meta.ordering)
+        member_count=get_subquery(Device, 'virtual_chassis')
+    )
     serializer_class = serializers.VirtualChassisSerializer
     filterset_class = filters.VirtualChassisFilterSet
 
@@ -631,8 +633,8 @@ class PowerPanelViewSet(ModelViewSet):
     queryset = PowerPanel.objects.prefetch_related(
         'site', 'rack_group'
     ).annotate(
-        powerfeed_count=Count('powerfeeds')
-    ).order_by(*PowerPanel._meta.ordering)
+        powerfeed_count=get_subquery(PowerFeed, 'power_panel')
+    )
     serializer_class = serializers.PowerPanelSerializer
     filterset_class = filters.PowerPanelFilterSet
 

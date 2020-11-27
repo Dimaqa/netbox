@@ -1,6 +1,89 @@
 # NetBox v2.9
 
-## v2.9.5 (FUTURE)
+## v2.9.11 (FUTURE)
+
+### Bug Fixes
+
+* [#5383](https://github.com/netbox-community/netbox/issues/5383) - Fix setting user password via REST API
+
+---
+
+## v2.9.10 (2020-11-24)
+
+### Enhancements
+
+* [#5319](https://github.com/netbox-community/netbox/issues/5319) - Add USB types for power ports and outlets
+* [#5337](https://github.com/netbox-community/netbox/issues/5337) - Add "splice" type for pass-through ports
+
+### Bug Fixes
+
+* [#5235](https://github.com/netbox-community/netbox/issues/5235) - Fix exception when editing IP address with a NAT IP assigned to a non-racked device
+* [#5309](https://github.com/netbox-community/netbox/issues/5309) - Avoid extraneous database queries when manipulating objects
+* [#5345](https://github.com/netbox-community/netbox/issues/5345) - Fix non-deterministic ordering of prefixes and IP addresses
+* [#5350](https://github.com/netbox-community/netbox/issues/5350) - Filter available racks by selected group when creating a rack reservation
+* [#5355](https://github.com/netbox-community/netbox/issues/5355) - Limit rack groups by selected site when editing a rack
+* [#5356](https://github.com/netbox-community/netbox/issues/5356) - Populate manufacturer field when adding a device component template
+* [#5360](https://github.com/netbox-community/netbox/issues/5360) - Clear VLAN assignments when setting interface mode to none
+
+---
+
+## v2.9.9 (2020-11-09)
+
+### Enhancements
+
+* [#5304](https://github.com/netbox-community/netbox/issues/5304) - Return server error messages as JSON when handling REST API requests
+* [#5310](https://github.com/netbox-community/netbox/issues/5310) - Link to rack groups within rack list table
+* [#5327](https://github.com/netbox-community/netbox/issues/5327) - Be more strict when capturing anticipated ImportError exceptions
+
+### Bug Fixes
+
+* [#5271](https://github.com/netbox-community/netbox/issues/5271) - Fix auto-population of region field when editing a device
+* [#5314](https://github.com/netbox-community/netbox/issues/5314) - Fix config context rendering when multiple tags are assigned to an object
+* [#5316](https://github.com/netbox-community/netbox/issues/5316) - Dry running scripts should not trigger webhooks
+* [#5324](https://github.com/netbox-community/netbox/issues/5324) - Add missing template extension tags for plugins for VM interface view
+* [#5328](https://github.com/netbox-community/netbox/issues/5328) - Fix CreatedUpdatedFilterTest when running in non-UTC timezone
+* [#5331](https://github.com/netbox-community/netbox/issues/5331) - Fix filtering of sites by null region
+
+---
+
+## v2.9.8 (2020-10-30)
+
+### Enhancements
+
+* [#4559](https://github.com/netbox-community/netbox/issues/4559) - Improve device/VM context data rendering performance
+
+### Bug Fixes
+
+* [#3672](https://github.com/netbox-community/netbox/issues/3672) - Fix a caching issue causing incorrect related object counts in API responses
+* [#5113](https://github.com/netbox-community/netbox/issues/5113) - Fix incorrect caching of permission object assignments to user groups in the admin panel
+* [#5243](https://github.com/netbox-community/netbox/issues/5243) - Redirect user to appropriate tab after modifying device components
+* [#5273](https://github.com/netbox-community/netbox/issues/5273) - Fix exception when validating a new permission with no models selected
+* [#5282](https://github.com/netbox-community/netbox/issues/5282) - Fix high CPU load when LDAP authentication is enabled
+* [#5285](https://github.com/netbox-community/netbox/issues/5285) - Plugins no longer need to define `app_name` for API URLs to be included in the root view
+
+---
+
+## v2.9.7 (2020-10-12)
+
+### Bug Fixes
+
+* [#5231](https://github.com/netbox-community/netbox/issues/5231) - Fix KeyError exception when viewing object with custom link and debugging is disabled
+
+---
+
+## v2.9.6 (2020-10-09)
+
+### Bug Fixes
+
+* [#5229](https://github.com/netbox-community/netbox/issues/5229) - Fix AttributeError exception when LDAP authentication is enabled
+
+---
+
+## v2.9.5 (2020-10-09)
+
+### Enhancements
+
+* [#5202](https://github.com/netbox-community/netbox/issues/5202) - Extend the available context data when rendering custom links
 
 ### Bug Fixes
 
@@ -8,7 +91,17 @@
 * [#5174](https://github.com/netbox-community/netbox/issues/5174) - Ensure consistent alignment of rack elevations
 * [#5175](https://github.com/netbox-community/netbox/issues/5175) - Fix toggling of rack elevation order
 * [#5184](https://github.com/netbox-community/netbox/issues/5184) - Fix missing Power Utilization
+* [#5197](https://github.com/netbox-community/netbox/issues/5197) - Limit duplicate IPs shown on IP address view
 * [#5199](https://github.com/netbox-community/netbox/issues/5199) - Change default LDAP logging to INFO
+* [#5201](https://github.com/netbox-community/netbox/issues/5201) - Fix missing querystring when bulk editing/deleting VLAN Group VLANs when selecting "select all x items matching query"
+* [#5206](https://github.com/netbox-community/netbox/issues/5206) - Apply user pagination preferences to all paginated object lists
+* [#5211](https://github.com/netbox-community/netbox/issues/5211) - Add missing `has_primary_ip` filter for virtual machines
+* [#5217](https://github.com/netbox-community/netbox/issues/5217) - Prevent erroneous removal of prefetched GenericForeignKey data from tables
+* [#5218](https://github.com/netbox-community/netbox/issues/5218) - Raise validation error if a power port's `allocated_draw` exceeds its `maximum_draw`
+* [#5220](https://github.com/netbox-community/netbox/issues/5220) - Fix API patch request against IP Address endpoint with null assigned_object_type 
+* [#5221](https://github.com/netbox-community/netbox/issues/5221) - Fix bulk component creation for virtual machines
+* [#5224](https://github.com/netbox-community/netbox/issues/5224) - Don't allow a rear port to have fewer positions than the number of mapped front ports
+* [#5226](https://github.com/netbox-community/netbox/issues/5226) - Custom choice fields should be blank initially if no default choice has been designated
 
 ---
 

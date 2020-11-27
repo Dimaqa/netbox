@@ -1,4 +1,3 @@
-from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -6,7 +5,7 @@ from rest_framework.routers import APIRootView
 
 from dcim.models import Device
 from extras.api.serializers import RenderedGraphSerializer
-from extras.api.views import CustomFieldModelViewSet
+from extras.api.views import ConfigContextQuerySetMixin, CustomFieldModelViewSet
 from extras.models import Graph
 from utilities.api import ModelViewSet
 from utilities.utils import get_subquery
@@ -29,16 +28,16 @@ class VirtualizationRootView(APIRootView):
 
 class ClusterTypeViewSet(ModelViewSet):
     queryset = ClusterType.objects.annotate(
-        cluster_count=Count('clusters')
-    ).order_by(*ClusterType._meta.ordering)
+        cluster_count=get_subquery(Cluster, 'type')
+    )
     serializer_class = serializers.ClusterTypeSerializer
     filterset_class = filters.ClusterTypeFilterSet
 
 
 class ClusterGroupViewSet(ModelViewSet):
     queryset = ClusterGroup.objects.annotate(
-        cluster_count=Count('clusters')
-    ).order_by(*ClusterGroup._meta.ordering)
+        cluster_count=get_subquery(Cluster, 'group')
+    )
     serializer_class = serializers.ClusterGroupSerializer
     filterset_class = filters.ClusterGroupFilterSet
 
@@ -49,7 +48,7 @@ class ClusterViewSet(CustomFieldModelViewSet):
     ).annotate(
         device_count=get_subquery(Device, 'cluster'),
         virtualmachine_count=get_subquery(VirtualMachine, 'cluster')
-    ).order_by(*Cluster._meta.ordering)
+    )
     serializer_class = serializers.ClusterSerializer
     filterset_class = filters.ClusterFilterSet
 
@@ -58,7 +57,7 @@ class ClusterViewSet(CustomFieldModelViewSet):
 # Virtual machines
 #
 
-class VirtualMachineViewSet(CustomFieldModelViewSet):
+class VirtualMachineViewSet(CustomFieldModelViewSet, ConfigContextQuerySetMixin):
     queryset = VirtualMachine.objects.prefetch_related(
         'cluster__site', 'role', 'tenant', 'platform', 'primary_ip4', 'primary_ip6', 'tags'
     )

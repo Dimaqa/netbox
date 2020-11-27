@@ -1,4 +1,5 @@
 import django_tables2 as tables
+from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.exceptions import FieldDoesNotExist
 from django.db.models.fields.related import RelatedField
 from django.utils.safestring import mark_safe
@@ -63,7 +64,7 @@ class BaseTable(tables.Table):
                     field_path = column.accessor.split('.')
                     try:
                         model_field = model._meta.get_field(field_path[0])
-                        if isinstance(model_field, RelatedField):
+                        if isinstance(model_field, (RelatedField, GenericForeignKey)):
                             prefetch_fields.append('__'.join(field_path))
                     except FieldDoesNotExist:
                         pass
@@ -129,6 +130,7 @@ class ButtonsColumn(tables.TemplateColumn):
 
     :param model: Model class to use for calculating URL view names
     :param prepend_content: Additional template content to render in the column (optional)
+    :param return_url_extra: String to append to the return URL (e.g. for specifying a tab) (optional)
     """
     buttons = ('changelog', 'edit', 'delete')
     attrs = {'td': {'class': 'text-right text-nowrap noprint'}}
@@ -140,18 +142,19 @@ class ButtonsColumn(tables.TemplateColumn):
         </a>
     {{% endif %}}
     {{% if "edit" in buttons and perms.{app_label}.change_{model_name} %}}
-        <a href="{{% url '{app_label}:{model_name}_edit' {pk_field}=record.{pk_field} %}}?return_url={{{{ request.path }}}}" class="btn btn-xs btn-warning" title="Edit">
+        <a href="{{% url '{app_label}:{model_name}_edit' {pk_field}=record.{pk_field} %}}?return_url={{{{ request.path }}}}{{{{ return_url_extra }}}}" class="btn btn-xs btn-warning" title="Edit">
             <i class="fa fa-pencil"></i>
         </a>
     {{% endif %}}
     {{% if "delete" in buttons and perms.{app_label}.delete_{model_name} %}}
-        <a href="{{% url '{app_label}:{model_name}_delete' {pk_field}=record.{pk_field} %}}?return_url={{{{ request.path }}}}" class="btn btn-xs btn-danger" title="Delete">
+        <a href="{{% url '{app_label}:{model_name}_delete' {pk_field}=record.{pk_field} %}}?return_url={{{{ request.path }}}}{{{{ return_url_extra }}}}" class="btn btn-xs btn-danger" title="Delete">
             <i class="fa fa-trash"></i>
         </a>
     {{% endif %}}
     """
 
-    def __init__(self, model, *args, pk_field='pk', buttons=None, prepend_template=None, **kwargs):
+    def __init__(self, model, *args, pk_field='pk', buttons=None, prepend_template=None, return_url_extra='',
+                 **kwargs):
         if prepend_template:
             prepend_template = prepend_template.replace('{', '{{')
             prepend_template = prepend_template.replace('}', '}}')
@@ -168,6 +171,7 @@ class ButtonsColumn(tables.TemplateColumn):
 
         self.extra_context.update({
             'buttons': buttons or self.buttons,
+            'return_url_extra': return_url_extra,
         })
 
     def header(self):

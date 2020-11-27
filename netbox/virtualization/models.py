@@ -8,6 +8,7 @@ from taggit.managers import TaggableManager
 from dcim.choices import InterfaceModeChoices
 from dcim.models import BaseInterface, Device
 from extras.models import ChangeLoggedModel, ConfigContextModel, CustomFieldModel, ObjectChange, TaggedItem
+from extras.querysets import ConfigContextModelQuerySet
 from extras.utils import extras_features
 from utilities.fields import NaturalOrderingField
 from utilities.ordering import naturalize_interface
@@ -282,7 +283,7 @@ class VirtualMachine(ChangeLoggedModel, ConfigContextModel, CustomFieldModel):
     )
     tags = TaggableManager(through=TaggedItem)
 
-    objects = RestrictedQuerySet.as_manager()
+    objects = ConfigContextModelQuerySet.as_manager()
 
     csv_headers = [
         'name', 'status', 'role', 'cluster', 'tenant', 'platform', 'vcpus', 'memory', 'disk', 'comments',
@@ -462,18 +463,6 @@ class VMInterface(BaseInterface):
                 'untagged_vlan': "The untagged VLAN ({}) must belong to the same site as the interface's parent "
                                  "virtual machine, or it must be global".format(self.untagged_vlan)
             })
-
-    def save(self, *args, **kwargs):
-
-        # Remove untagged VLAN assignment for non-802.1Q interfaces
-        if self.mode is None:
-            self.untagged_vlan = None
-
-        # Only "tagged" interfaces may have tagged VLANs assigned. ("tagged all" implies all VLANs are assigned.)
-        if self.pk and self.mode != InterfaceModeChoices.MODE_TAGGED:
-            self.tagged_vlans.clear()
-
-        return super().save(*args, **kwargs)
 
     def to_objectchange(self, action):
         # Annotate the parent VirtualMachine

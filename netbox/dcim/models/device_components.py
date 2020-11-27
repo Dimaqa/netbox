@@ -405,6 +405,14 @@ class PowerPort(CableTermination, ComponentModel):
             self.description,
         )
 
+    def clean(self):
+
+        if self.maximum_draw is not None and self.allocated_draw is not None:
+            if self.allocated_draw > self.maximum_draw:
+                raise ValidationError({
+                    'allocated_draw': f"Allocated draw cannot exceed the maximum draw ({self.maximum_draw}W)."
+                })
+
     @property
     def connected_endpoint(self):
         """
@@ -581,6 +589,18 @@ class BaseInterface(models.Model):
     class Meta:
         abstract = True
 
+    def save(self, *args, **kwargs):
+
+        # Remove untagged VLAN assignment for non-802.1Q interfaces
+        if not self.mode:
+            self.untagged_vlan = None
+
+        # Only "tagged" interfaces may have tagged VLANs assigned. ("tagged all" implies all VLANs are assigned.)
+        if self.pk and self.mode != InterfaceModeChoices.MODE_TAGGED:
+            self.tagged_vlans.clear()
+
+        return super().save(*args, **kwargs)
+
 
 @extras_features('graphs', 'export_templates', 'webhooks')
 class Interface(CableTermination, ComponentModel, BaseInterface):
@@ -716,18 +736,6 @@ class Interface(CableTermination, ComponentModel, BaseInterface):
                                  "device, or it must be global".format(self.untagged_vlan)
             })
 
-    def save(self, *args, **kwargs):
-
-        # Remove untagged VLAN assignment for non-802.1Q interfaces
-        if self.mode is None:
-            self.untagged_vlan = None
-
-        # Only "tagged" interfaces may have tagged VLANs assigned. ("tagged all" implies all VLANs are assigned.)
-        if self.pk and self.mode != InterfaceModeChoices.MODE_TAGGED:
-            self.tagged_vlans.clear()
-
-        return super().save(*args, **kwargs)
-
     @property
     def connected_endpoint(self):
         """
@@ -843,17 +851,16 @@ class FrontPort(CableTermination, ComponentModel):
 
         # Validate rear port assignment
         if self.rear_port.device != self.device:
-            raise ValidationError(
-                "Rear port ({}) must belong to the same device".format(self.rear_port)
-            )
+            raise ValidationError({
+                "rear_port": f"Rear port ({self.rear_port}) must belong to the same device"
+            })
 
         # Validate rear port position assignment
         if self.rear_port_position > self.rear_port.positions:
-            raise ValidationError(
-                "Invalid rear port position ({}); rear port {} has only {} positions".format(
-                    self.rear_port_position, self.rear_port.name, self.rear_port.positions
-                )
-            )
+            raise ValidationError({
+                "rear_port_position": f"Invalid rear port position ({self.rear_port_position}): Rear port "
+                                      f"{self.rear_port.name} has only {self.rear_port.positions} positions"
+            })
 
 
 @extras_features('webhooks')
@@ -882,6 +889,16 @@ class RearPort(CableTermination, ComponentModel):
 
     def get_absolute_url(self):
         return reverse('dcim:rearport', kwargs={'pk': self.pk})
+
+    def clean(self):
+
+        # Check that positions count is greater than or equal to the number of associated FrontPorts
+        frontport_count = self.frontports.count()
+        if self.positions < frontport_count:
+            raise ValidationError({
+                "positions": f"The number of positions cannot be less than the number of mapped front ports "
+                             f"({frontport_count})"
+            })
 
     def to_csv(self):
         return (
